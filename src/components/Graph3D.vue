@@ -14,63 +14,89 @@ let animationId = null;
 const categories = ["科技", "艺术", "教育", "医疗", "娱乐"];
 
 const initGraph = () => {
-  const centerNode = {
-    id: "太阳",
-    val: 20,
-    fx: 0,
-    fy: 0,
-    fz: 0,
-    group: "center",
-  };
-  const orbitNodes = categories.map((name, i) => ({
+  // 让中间的球在原点
+  const nodes = categories.map((name, i) => ({
     id: name,
     val: 10,
-    group: "orbit",
-    angle: Math.random() * 2 * Math.PI,
-    orbitRadius: 80 + i * 30,
-    orbitSpeed: 0.01 + i * 0.002,
+    group: "main",
+    fx: (i - (categories.length - 1) / 2) * 60,
+    fy: 0,
+    fz: 0,
   }));
 
-  const nodes = [centerNode, ...orbitNodes];
-  const data = { nodes, links: [] };
+  const data = {
+    nodes,
+    links: [],
+  };
 
   graph = ForceGraph3D()(graphContainer.value)
     .graphData(data)
     .nodeLabel("id")
     .nodeThreeObject((node) => {
-      const geometry = new THREE.SphereGeometry(
-        node.group === "center" ? 6 : 3,
-        16,
-        16
-      );
+      let geometry;
+      let color;
+
+      // Create different geometries and colors based on category
+      switch (node.id) {
+        case "科技":
+          geometry = new THREE.OctahedronGeometry(5);
+          color = 0x00ff88; // Cyan-green
+          break;
+        case "艺术":
+          geometry = new THREE.TorusGeometry(4, 2, 16, 32);
+          color = 0xff3366; // Pink-red
+          break;
+        case "教育":
+          geometry = new THREE.DodecahedronGeometry(5);
+          color = 0x4488ff; // Blue
+          break;
+        case "医疗":
+          geometry = new THREE.IcosahedronGeometry(5);
+          color = 0xffff00; // Yellow
+          break;
+        case "娱乐":
+          geometry = new THREE.TetrahedronGeometry(5);
+          color = 0xff8800; // Orange
+          break;
+        default:
+          geometry = new THREE.SphereGeometry(4, 16, 16);
+          color = 0xffffff;
+      }
+
       const material = new THREE.MeshPhongMaterial({
-        color: node.group === "center" ? 0xffdd55 : 0xffffff,
-        emissive: node.group === "center" ? 0xffcc00 : 0x888888,
-        emissiveIntensity: 0.8,
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.4,
+        specular: 0x111111,
         shininess: 30,
         transparent: true,
         opacity: 0.9,
       });
-      const sphere = new THREE.Mesh(geometry, material);
-      sphere.userData = {
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData = {
         scale: 1,
-        speed: 0.004,
+        speed: 0.002,
       };
-      return sphere;
+      return mesh;
     });
 
   const scene = graph.scene();
   scene.background = new THREE.Color(0x111111);
 
+  // 灯光
   scene.add(new THREE.AmbientLight(0x404040));
 
-  const pointLight = new THREE.PointLight(0xffffff, 1.5, 300);
-  pointLight.position.set(100, 100, 100);
-  scene.add(pointLight);
+  const pointLight1 = new THREE.PointLight(0xffffff, 1.5, 300);
+  pointLight1.position.set(100, 100, 100);
+  scene.add(pointLight1);
 
-  // 🌌 星空背景
+  const pointLight2 = new THREE.PointLight(0xffffff, 1.5, 300);
+  pointLight2.position.set(-100, -100, -100);
+  scene.add(pointLight2);
+
   const starsGeometry = new THREE.BufferGeometry();
-  const starCount = 3000;
+  const starCount = 1000;
   const positions = [];
 
   for (let i = 0; i < starCount; i++) {
@@ -95,45 +121,12 @@ const initGraph = () => {
   const starField = new THREE.Points(starsGeometry, starsMaterial);
   scene.add(starField);
 
-  // 🌟 添加轨道环
-  orbitNodes.forEach((node) => {
-    const ringGeometry = new THREE.RingGeometry(
-      node.orbitRadius - 0.5,
-      node.orbitRadius + 0.5,
-      64
-    );
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0x888888,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.3,
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = -Math.PI / 2;
-    scene.add(ring);
-  });
-
-  // 🌀 动画循环
   const animate = () => {
-    const now = Date.now();
-
-    // 轨道旋转更新位置
-    graph.graphData().nodes.forEach((node) => {
-      if (node.group === "orbit") {
-        node.angle += node.orbitSpeed;
-        const x = node.orbitRadius * Math.cos(node.angle);
-        const z = node.orbitRadius * Math.sin(node.angle);
-        if (node.__threeObj) {
-          node.__threeObj.position.set(x, 0, z);
-        }
-      }
-    });
-
-    // 呼吸动画
+    // 球体呼吸动画
     graph.scene().traverse((obj) => {
       if (obj instanceof THREE.Mesh && obj.userData.scale !== undefined) {
         obj.userData.scale =
-          0.8 + (0.4 * (Math.sin(now * obj.userData.speed) + 1)) / 2;
+          0.8 + (0.4 * (Math.sin(Date.now() * obj.userData.speed) + 1)) / 2;
         obj.scale.set(
           obj.userData.scale,
           obj.userData.scale,
@@ -142,17 +135,21 @@ const initGraph = () => {
       }
     });
 
-    // 星星流动
+    // 流星运动动画
     const posArray = starsGeometry.attributes.position.array;
     for (let i = 1; i < posArray.length; i += 3) {
-      posArray[i] -= 3;
+      posArray[i] -= 1; // y轴下落
+
       if (posArray[i] < -500) {
         posArray[i] = 500;
-        posArray[i - 1] = (Math.random() - 0.5) * 2000;
-        posArray[i + 1] = (Math.random() - 0.5) * 2000;
+        posArray[i - 1] = (Math.random() - 0.5) * 2000; // x
+        posArray[i + 1] = (Math.random() - 0.5) * 2000; // z
       }
     }
     starsGeometry.attributes.position.needsUpdate = true;
+
+    // 渲染
+    graph.cameraPosition(graph.cameraPosition());
 
     animationId = requestAnimationFrame(animate);
   };
